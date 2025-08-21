@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual envs
+.venv/
+venv/
+
+# Environment files
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Ignore all contents inside models/ and output/
+models/**
+output/**
+
+# Optionally keep placeholder files if needed
+!models/.gitkeep
+!output/.gitkeep

@@ -1,0 +1,18 @@
+# Exclude large or changing directories to keep build cache effective
+models/
+output/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.env
+.venv/
+.git/
+.gitignore
+.DS_Store
+*.swp
+*.swo
+**/.mypy_cache/
+**/.pytest_cache/
+**/.cache/

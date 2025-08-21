@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   coqui-tts:
-    build: .
+    build:
+      context: .
+      target: runtime
     ports:
       - "8083:8000"
     volumes:
