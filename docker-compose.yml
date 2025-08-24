@@ -4,7 +4,6 @@ services:
   coqui-tts:
     build:
       context: .
-      target: runtime
     ports:
       - "8083:8000"
     volumes:
@@ -16,7 +15,16 @@ services:
       - TTS_HOME=/app/models
       - PYTHONUNBUFFERED=1
       - WATCHFILES_FORCE_POLLING=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

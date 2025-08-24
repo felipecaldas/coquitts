@@ -16,7 +16,6 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def _run_tts_command(cmd_list, timeout_seconds: int):
     env = os.environ.copy()
-    env["PATH"] = "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin"
     env["TTS_HOME"] = "/app/models"
     return subprocess.run(
         cmd_list,
@@ -64,7 +63,7 @@ def _synthesize_single_chunk(
     file_id = str(uuid.uuid4())
     output_path = OUTPUT_DIR / f"{file_id}.wav"
 
-    cmd = ["/opt/venv/bin/tts", "--text", text, "--out_path", str(output_path)]
+    cmd = ["tts", "--text", text, "--out_path", str(output_path)]
     if model_name:
         cmd.extend(["--model_name", model_name])
     if speaker_idx is not None:
@@ -76,6 +75,8 @@ def _synthesize_single_chunk(
         if model_name and "xtts_v2" in model_name.lower():
             if "--language_idx" not in cmd:
                 cmd.extend(["--language_idx", "pt"])  # default for XTTS v2 voice cloning
+    # Prefer GPU when available (boolean flag, no value)
+    cmd.append("--use_cuda")
 
     logger.info("Starting TTS synthesis: model=%s, text_length=%d, speaker_wav=%s", model_name, len(text), speaker_wav)
     logger.debug("TTS base command: %s", " ".join(cmd))
