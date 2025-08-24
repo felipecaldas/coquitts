@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /opt/venv /opt/venv
 
 # Copy application code
-COPY app.py .
+COPY . .
 
 # Create directories for output and reference audio (models already copied from builder)
 RUN mkdir -p /app/output /app/reference_audio

@@ -76,6 +76,7 @@ def get_available_models() -> str:
 
 def preprocess_pt_text(text: str) -> str:
     """Portuguese preprocessing to avoid speaking sentence-ending periods while preserving decimals and abbreviations."""
+    text = normalize_text(text)
     if not text:
         return text
     # Protect decimals: 12.34 -> 12<DECIMAL>34
@@ -93,6 +94,23 @@ def preprocess_pt_text(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text).strip()
     # Restore tokens
     text = text.replace("<DECIMAL>", ".").replace("<DOT>", ".")
+    return text
+
+
+def normalize_text(text: str) -> str:
+    """Normalize quotes, apostrophes, and spaces that can confuse the TTS CLI.
+
+    - Replace non-breaking spaces with normal spaces
+    - Collapse multiple spaces
+    """
+    if not text:
+        return text
+    # Curly quotes/apostrophes to straight
+    text = text.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+    # NBSP and other spaces to normal
+    text = text.replace("\u00A0", " ")
+    # Collapse multiple spaces
+    text = re.sub(r"[ \t\u2009\u200A\u200B\u202F\u205F\u3000]+", " ", text)
     return text
 
 

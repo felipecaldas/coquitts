@@ -34,14 +34,16 @@ def synthesize_speech(
     language_idx: Optional[int] = None,
     speaker_wav: Optional[str] = None,
 ) -> str:
-    """Synthesize speech and return path to audio file. Splits long texts for voice cloning."""
-    if speaker_wav and len(text) > 500:
-        logger.info("Long text detected (%d chars), splitting into chunks for voice cloning", len(text))
-        chunks = split_text_into_chunks(text, max_length=500)
-        logger.info("Split into %d chunks", len(chunks))
+    """Synthesize speech and return path to audio file. Always chunk for voice cloning to avoid truncation."""
+    # Always chunk when cloning voice (XTTS can truncate with long inputs or multiple newlines)
+    if speaker_wav:
+        chunks = split_text_into_chunks(text, max_length=300)
+        if len(chunks) == 1:
+            return _synthesize_single_chunk(chunks[0], model_name, speaker_idx, language_idx, speaker_wav)
+        logger.info("Voice cloning: split into %d chunks", len(chunks))
         chunk_files: List[str] = []
         for i, chunk in enumerate(chunks):
-            logger.info("Processing chunk %d/%d", i + 1, len(chunks))
+            logger.info("Processing chunk %d/%d (len=%d)", i + 1, len(chunks), len(chunk))
             chunk_file = _synthesize_single_chunk(chunk, model_name, speaker_idx, language_idx, speaker_wav)
             chunk_files.append(chunk_file)
         file_id = str(uuid.uuid4())

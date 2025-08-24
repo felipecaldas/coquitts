@@ -14,6 +14,8 @@ from utils import (
     preprocess_pt_text,
     get_wav_duration_seconds,
     count_words,
+    normalize_text,
+    split_text_into_chunks,
 )
 from tts_engine import synthesize_speech
 
@@ -193,6 +195,26 @@ async def synthesize_with_cloned_voice(request: TextRequest):
         error_msg = f"Voice cloning synthesis failed: {str(e)}"
         logger.error(error_msg, exc_info=True)
         raise HTTPException(status_code=500, detail=error_msg)
+
+@app.post("/debug/clone-voice/preview")
+async def debug_clone_voice_preview(request: TextRequest):
+    """Return the normalized text, preprocessed text, and chunk preview for debugging."""
+    try:
+        raw = request.text or ""
+        normalized = normalize_text(raw)
+        preprocessed = preprocess_pt_text(raw)
+        # For preview, use the same chunking logic as TTS voice cloning path (500 chars)
+        chunks = split_text_into_chunks(preprocessed, max_length=500)
+        return {
+            "normalized_text": normalized,
+            "preprocessed_text": preprocessed,
+            "chunk_count": len(chunks),
+            "chunks": chunks,
+            "chunk_lengths": [len(c) for c in chunks],
+        }
+    except Exception as e:
+        logger.error("Debug preview failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/cleanup")
 async def cleanup_audio_files():
