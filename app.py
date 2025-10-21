@@ -128,8 +128,9 @@ async def synthesize_text(request: TTSRequest):
             logger.warning("Synthesis request rejected: empty text")
             raise HTTPException(status_code=400, detail="Text cannot be empty")
         logger.info("Starting synthesis: text='%s...', model=%s", request.text[:50], request.model_name)
+        normalized_text = normalize_text(request.text)
         audio_path = synthesize_speech(
-            text=request.text,
+            text=normalized_text,
             model_name=request.model_name,
             speaker_idx=request.speaker_idx,
             language_idx=request.language_idx,
@@ -142,7 +143,7 @@ async def synthesize_text(request: TTSRequest):
             headers={
                 "Content-Disposition": "attachment",
                 "X-Audio-Duration": str(round(get_wav_duration_seconds(audio_path), 3)),
-                "X-Word-Count": str(count_words(request.text)),
+                "X-Word-Count": str(count_words(normalized_text)),
             },
         )
     except HTTPException:

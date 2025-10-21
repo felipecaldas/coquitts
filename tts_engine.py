@@ -34,23 +34,32 @@ def synthesize_speech(
     speaker_wav: Optional[str] = None,
 ) -> str:
     """Synthesize speech and return path to audio file. Always chunk for voice cloning to avoid truncation."""
-    # Always chunk when cloning voice (XTTS can truncate with long inputs or multiple newlines)
-    if speaker_wav:
-        chunks = split_text_into_chunks(text, max_length=300)
-        if len(chunks) == 1:
-            return _synthesize_single_chunk(chunks[0], model_name, speaker_idx, language_idx, speaker_wav)
-        logger.info("Voice cloning: split into %d chunks", len(chunks))
-        chunk_files: List[str] = []
-        for i, chunk in enumerate(chunks):
-            logger.info("Processing chunk %d/%d (len=%d)", i + 1, len(chunks), len(chunk))
+    # Determine chunk length based on whether it's a voice cloning task or not.
+    # Voice cloning (XTTS) is more sensitive to long inputs.
+    max_chunk_length = 300 if speaker_wav else 500
+    chunks = split_text_into_chunks(text, max_length=max_chunk_length)
+
+    if len(chunks) == 1:
+        return _synthesize_single_chunk(chunks[0], model_name, speaker_idx, language_idx, speaker_wav)
+
+    logger.info("Splitting synthesis into %d chunks (max_length=%d)", len(chunks), max_chunk_length)
+    chunk_files: List[str] = []
+    for i, chunk in enumerate(chunks):
+        logger.info("Processing chunk %d/%d (len=%d)", i + 1, len(chunks), len(chunk))
+        try:
             chunk_file = _synthesize_single_chunk(chunk, model_name, speaker_idx, language_idx, speaker_wav)
             chunk_files.append(chunk_file)
-        file_id = str(uuid.uuid4())
-        final_output_path = OUTPUT_DIR / f"{file_id}.wav"
-        logger.info("Concatenating %d chunks into final audio", len(chunk_files))
-        return concatenate_wav_files(chunk_files, str(final_output_path))
-    else:
-        return _synthesize_single_chunk(text, model_name, speaker_idx, language_idx, speaker_wav)
+        except Exception as e:
+            logger.error("Failed to synthesize chunk %d: %s", i + 1, e)
+            # Clean up previously generated chunks if one fails
+            for f in chunk_files:
+                Path(f).unlink(missing_ok=True)
+            raise Exception(f"Failed to process chunk {i+1}/{len(chunks)}: {e}") from e
+
+    file_id = str(uuid.uuid4())
+    final_output_path = OUTPUT_DIR / f"{file_id}.wav"
+    logger.info("Concatenating %d chunks into final audio file: %s", len(chunk_files), final_output_path)
+    return concatenate_wav_files(chunk_files, str(final_output_path))
 
 
 def _synthesize_single_chunk(
