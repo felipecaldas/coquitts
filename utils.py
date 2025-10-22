@@ -50,19 +50,20 @@ def get_available_models() -> str:
     try:
         logger.info("Fetching TTS models list...")
         env = os.environ.copy()
-        env["PATH"] = "/opt/venv/bin:/usr/local/bin:/usr/bin:/bin"
         env["TTS_HOME"] = "/app/models"
 
-        tts_cmd = "/opt/venv/bin/tts"
-        result = subprocess.run([tts_cmd, "--list_models"], capture_output=True, text=True, timeout=180, env=env)
+        # Use direct 'tts' command since it's available in the container
+        result = subprocess.run(["tts", "--list_models"], capture_output=True, text=True, timeout=180, env=env)
         if result.returncode == 0:
             _models_cache = result.stdout or "No models found. The TTS command returned no output."
             return _models_cache
-        # Fallback
-        result = subprocess.run(["/opt/venv/bin/python", "-m", "tts", "--list_models"], capture_output=True, text=True, timeout=120, env=env)
+
+        # Fallback: try python -m TTS (though this may not work in this version)
+        result = subprocess.run(["python", "-m", "TTS", "--list_models"], capture_output=True, text=True, timeout=120, env=env)
         if result.returncode == 0:
             _models_cache = result.stdout or "No models found."
             return _models_cache
+
         _models_cache = "TTS models not available - this may be due to network issues or missing model downloads"
         return _models_cache
     except subprocess.TimeoutExpired:

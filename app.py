@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import uvicorn
 
 from utils import (
@@ -29,16 +29,29 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="CoquiTTS API",
-    description="REST API for CoquiTTS Text-to-Speech synthesis",
+    description="REST API for CoquiTTS Text-to-Speech synthesis with support for 17 languages and voice cloning",
     version="1.0.0"
 )
 
 # Request models
+
 class TTSRequest(BaseModel):
-    text: str
-    model_name: Optional[str] = None
-    speaker_idx: Optional[int] = None
-    language_idx: Optional[int] = None
+    text: str = Field(..., description="Text to synthesize into speech", example="Hello world")
+    model_name: Optional[str] = Field(
+        default=None,
+        description="TTS model to use. If not specified, defaults to tts_models/multilingual/multi-dataset/xtts_v2",
+        example="tts_models/multilingual/multi-dataset/xtts_v2"
+    )
+    speaker_idx: Optional[int] = Field(
+        default=None,
+        description="Speaker index for multi-speaker models. Use integer index or speaker name",
+        example=0
+    )
+    language_idx: Optional[str] = Field(
+        default=None,
+        description="Language code for multilingual models. Supported: en, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh-cn, hu, ko, ja, hi. Defaults to 'en'",
+        example="fr"
+    )
 
 class ModelInfo(BaseModel):
     model_config = {"protected_namespaces": ()}
@@ -48,7 +61,7 @@ class ModelInfo(BaseModel):
     language: str
 
 class TextRequest(BaseModel):
-    text: str
+    text: str = Field(..., description="Text to synthesize", example="Olá, como você está?")
 
 # Directories
 output_dir = Path("/app/output")
@@ -71,6 +84,28 @@ async def root():
             "/synthesize/portuguese": "Quick Portuguese synthesis",
             "/synthesize/clone_voice": "Synthesize speech using your cloned voice (Brazilian Portuguese)",
         },
+        "supported_languages": {
+            "description": "Available language codes for multilingual models (XTTS v2)",
+            "codes": ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "hu", "ko", "ja", "hi"],
+            "default": "en"
+        },
+        "parameters": {
+            "model_name": {
+                "description": "TTS model to use",
+                "default": "tts_models/multilingual/multi-dataset/xtts_v2",
+                "example": "tts_models/multilingual/multi-dataset/xtts_v2"
+            },
+            "speaker_idx": {
+                "description": "Speaker index for multi-speaker models (optional)",
+                "example": 0
+            },
+            "language_idx": {
+                "description": "Language code for multilingual models",
+                "supported": ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "hu", "ko", "ja", "hi"],
+                "default": "en",
+                "example": "fr"
+            }
+        }
     }
 
 @app.get("/health")
@@ -121,17 +156,52 @@ async def list_portuguese_models():
         logger.error(error_msg, exc_info=True)
         return {"status": "error", "message": error_msg, "models": [], "count": 0}
 
-@app.post("/synthesize")
+@app.post(
+    "/synthesize",
+    summary="Synthesize speech from text",
+    description="""
+    Convert text to speech using CoquiTTS models.
+
+    **Supported Languages (for multilingual models):**
+    - en (English) - Default
+    - es (Spanish)
+    - fr (French)
+    - de (German)
+    - it (Italian)
+    - pt (Portuguese)
+    - pl (Polish)
+    - tr (Turkish)
+    - ru (Russian)
+    - nl (Dutch)
+    - cs (Czech)
+    - ar (Arabic)
+    - zh-cn (Chinese Simplified)
+    - hu (Hungarian)
+    - ko (Korean)
+    - ja (Japanese)
+    - hi (Hindi)
+
+    **Examples:**
+    - Basic: `{"text": "Hello world"}`
+    - French: `{"text": "Bonjour le monde", "language_idx": "fr"}`
+    - Specific model: `{"text": "Hello", "model_name": "tts_models/en/ljspeech/tacotron2-DDC"}`
+    """,
+    response_description="Audio file in WAV format"
+)
 async def synthesize_text(request: TTSRequest):
     try:
         if not request.text or not request.text.strip():
             logger.warning("Synthesis request rejected: empty text")
             raise HTTPException(status_code=400, detail="Text cannot be empty")
-        logger.info("Starting synthesis: text='%s...', model=%s", request.text[:50], request.model_name)
+
+        # Use default model if none specified
+        model_name = request.model_name or "tts_models/multilingual/multi-dataset/xtts_v2"
+        logger.info("Starting synthesis: text='%s...', model=%s", request.text[:50], model_name)
+
         normalized_text = normalize_text(request.text)
         audio_path = synthesize_speech(
             text=normalized_text,
-            model_name=request.model_name,
+            model_name=model_name,
             speaker_idx=request.speaker_idx,
             language_idx=request.language_idx,
         )
@@ -153,7 +223,24 @@ async def synthesize_text(request: TTSRequest):
         logger.error(error_msg, exc_info=True)
         raise HTTPException(status_code=500, detail=error_msg)
 
-@app.post("/synthesize/clone_voice")
+@app.post(
+    "/synthesize/clone_voice",
+    summary="Voice cloning synthesis",
+    description="""
+    Synthesize speech using your cloned voice in Brazilian Portuguese.
+
+    **Requirements:**
+    - Upload your reference audio file to `/app/reference_audio/reference_voice.wav`
+    - Text will be preprocessed for Portuguese pronunciation
+    - Uses XTTS v2 model with Portuguese language
+
+    **Example:**
+    ```json
+    {"text": "Olá, como você está?"}
+    ```
+    """,
+    response_description="Audio file in WAV format with cloned voice"
+)
 async def synthesize_with_cloned_voice(request: TextRequest):
     try:
         if not request.text or not request.text.strip():

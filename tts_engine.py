@@ -15,8 +15,11 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _run_tts_command(cmd_list, timeout_seconds: int):
+    """Run TTS command directly since 'tts' is available in the container."""
     env = os.environ.copy()
     env["TTS_HOME"] = "/app/models"
+
+    # Use the command as-is since 'tts' is available directly
     return subprocess.run(
         cmd_list,
         capture_output=True,
@@ -30,7 +33,7 @@ def synthesize_speech(
     text: str,
     model_name: Optional[str] = None,
     speaker_idx: Optional[int] = None,
-    language_idx: Optional[int] = None,
+    language_idx: Optional[str] = None,
     speaker_wav: Optional[str] = None,
 ) -> str:
     """Synthesize speech and return path to audio file. Always chunk for voice cloning to avoid truncation."""
@@ -66,7 +69,7 @@ def _synthesize_single_chunk(
     text: str,
     model_name: Optional[str] = None,
     speaker_idx: Optional[int] = None,
-    language_idx: Optional[int] = None,
+    language_idx: Optional[str] = None,
     speaker_wav: Optional[str] = None,
 ) -> str:
     file_id = str(uuid.uuid4())
@@ -78,12 +81,22 @@ def _synthesize_single_chunk(
     if speaker_idx is not None:
         cmd.extend(["--speaker_idx", str(speaker_idx)])
     if language_idx is not None:
-        cmd.extend(["--language_idx", str(language_idx)])
+        cmd.extend(["--language_idx", language_idx])
     if speaker_wav is not None:
         cmd.extend(["--speaker_wav", speaker_wav])
         if model_name and "xtts_v2" in model_name.lower():
             if "--language_idx" not in cmd:
                 cmd.extend(["--language_idx", "pt"])  # default for XTTS v2 voice cloning
+
+    # For multi-speaker models like XTTS v2, add default speaker if none specified
+    if model_name and "xtts_v2" in model_name.lower() and speaker_idx is None and speaker_wav is None:
+        cmd.extend(["--speaker_idx", "Aaron Dreschner"])  # Use first available speaker
+
+    # For multilingual models like XTTS v2, add default language if none specified
+    # Skip for voice cloning since the reference voice determines the language
+    if model_name and "xtts_v2" in model_name.lower() and language_idx is None and speaker_wav is None:
+        cmd.extend(["--language_idx", "en"])  # Default to English
+
     # Prefer GPU when available (boolean flag, no value)
     cmd.append("--use_cuda")
 
@@ -91,7 +104,7 @@ def _synthesize_single_chunk(
     logger.debug("TTS base command: %s", " ".join(cmd))
 
     try:
-        timeout_duration = 600 if speaker_wav else 120
+        timeout_duration = 600 if speaker_wav else 240
         result = _run_tts_command(cmd, timeout_duration)
         logger.debug("TTS command completed: return_code=%s", result.returncode)
         logger.debug("TTS stdout: %s", result.stdout)
@@ -124,7 +137,9 @@ def _synthesize_single_chunk(
         # Failure path
         if output_path.exists():
             output_path.unlink(missing_ok=True)
-        raise Exception(f"TTS command failed: {result.stderr}")
+        error_details = f"TTS command failed: return_code={result.returncode}, stderr='{result.stderr}', stdout='{result.stdout}'"
+        logger.error(error_details)
+        raise Exception(error_details)
 
     except subprocess.TimeoutExpired:
         logger.error("TTS synthesis timeout after %d seconds", timeout_duration)
